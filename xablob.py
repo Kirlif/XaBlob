@@ -11,7 +11,7 @@ from io import BytesIO
 from os import getcwd, listdir, mkdir, path, remove, rename, rmdir
 from pickle import dump, load
 from struct import pack, pack_into, unpack, unpack_from
-from sys import argv, exit
+from sys import exit
 import lz4.block
 
 class Header:
@@ -131,7 +131,7 @@ class Reader:
             try:
                 shstrtab_blob_index = shstrtab.index(b"payload")
             except ValueError:
-                exit(f"Error: store not found.")
+                exit("Error: store not found.")
             for i, sh in enumerate(section_headers):
                 if unpack("<I", sh[:4])[0] == shstrtab_blob_index:
                     self.shblob_index = i
@@ -157,7 +157,7 @@ class Reader:
         IndexEntryCount = header.index_entry_count
 
         index = []
-        for i in range(IndexEntryCount):
+        for _ in range(IndexEntryCount):
             if self.Is64Bit:
                 name_hash, descriptor_index = unpack("<QI", self.store.read(12))
             else:
@@ -394,15 +394,13 @@ def clean(working_dir):
 def file_path(string):
     if path.isfile(string):
         return string
-    else:
-        raise ()
+    raise()
 
 
 def dir_path(string):
     if path.isdir(string):
         return string
-    else:
-        raise()
+    raise()
 
 
 if __name__ == "__main__":
