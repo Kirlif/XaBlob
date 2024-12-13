@@ -31,3 +31,9 @@ package dlls<br>
 remove « assemblies » folder<br>
 optional arguement: path to the parent directory of the elf<br>
 current directory by default
+
+
+### ToDo
+- regular assemblies and satellite assemblies
+
+- runtime config blob?

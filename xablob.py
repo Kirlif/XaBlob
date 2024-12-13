@@ -235,7 +235,7 @@ class Reader:
             if assembly.config_size:
                 self.store.seek(assembly.config_offset)
                 config_data = self.store.read(assembly.config_size)
-                write(path.splitext(assembly.name)[0] + ".config", config_data)
+                write(assembly.name + ".config", config_data)
 
     def write_data(self):
         elf = {
