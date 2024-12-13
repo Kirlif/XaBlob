@@ -43,30 +43,30 @@ class EntryDescriptor:
 
 class TemporaryItem:
     def __init__(self, name, descriptor):
-        self.Name = name
-        self.Descriptor = descriptor
-        self.IndexEntries = []
+        self.name = name
+        self.descriptor = descriptor
+        self.index_entries = []
 
 
 class AssemblyStoreItem:
     def __init__(self, name, is64bit, hashes):
-        self.Name = name
-        self.Is64Bit = is64bit
-        self.Hashes = hashes
+        self.name = name
+        self.is64bit = is64bit
+        self.hashes = hashes
 
 
 class StoreItemV2(AssemblyStoreItem):
     def __init__(self, target_arch, name, is64bit, index_entries, descriptor):
         super().__init__(name, is64bit, self.index_to_hashes(index_entries))
-        self.DataOffset = descriptor.data_offset
-        self.DataSize = descriptor.data_size
-        self.DebugOffset = descriptor.debug_data_offset
-        self.DebugSize = descriptor.debug_data_size
-        self.ConfigOffset = descriptor.config_data_offset
-        self.ConfigSize = descriptor.config_data_size
-        self.MappingIndex = descriptor.mapping_index
-        self.TargetArch = target_arch
-        self.IsCompressed = None
+        self.data_offset = descriptor.data_offset
+        self.data_size = descriptor.data_size
+        self.debug_offset = descriptor.debug_data_offset
+        self.debug_size = descriptor.debug_data_size
+        self.config_offset = descriptor.config_data_offset
+        self.config_size = descriptor.config_data_size
+        self.mapping_index = descriptor.mapping_index
+        self.target_arch = target_arch
+        self.is_compressed = None
 
     def index_to_hashes(self, index_entries):
         return [ie.name_hash for ie in index_entries]
@@ -84,12 +84,14 @@ class Reader:
         self.assemblies_folder = path.join(path.dirname(self.libassemblies), "assemblies")
         self.store = None
         self.shblob_index = None
+        self.blob_offset = None
+        self.blob_size = None
         self.lib = None
         self.pre_sh_table = None
         self.sh_table = None
-        self.Is64Bit = None
-        self.Assemblies = None
-        self.Header = None
+        self.is64bit = None
+        self.assemblies = None
+        self.header = None
 
     def walk(self):
         self.get_store()
@@ -104,27 +106,27 @@ class Reader:
             ei_class = lib[4]
             e_machine = unpack_from("<H", lib, 0x12)[0]
             try:
-                self.Is64Bit = "64" in self.MACHINES[e_machine] and ei_class == 2
+                self.is64bit = "64" in self.MACHINES[e_machine] and ei_class == 2
             except KeyError:
                 exit(f"Error: {path.basename(self.libassemblies)} is not supported.")
-            e_shoff = unpack_from("<Q", lib, 0x28)[0] if self.Is64Bit else unpack_from("<I", lib, 0x20)[0]
-            e_shentsize = unpack_from("<H", lib, 0x3A if self.Is64Bit else 0x2E)[0]
-            e_shnum = unpack_from("<H", lib, 0x3C if self.Is64Bit else 0x30)[0]
-            e_shstrndx = unpack_from("<H", lib, 0x3E if self.Is64Bit else 0x32)[0]
+            e_shoff = unpack_from("<Q", lib, 0x28)[0] if self.is64bit else unpack_from("<I", lib, 0x20)[0]
+            e_shentsize = unpack_from("<H", lib, 0x3A if self.is64bit else 0x2E)[0]
+            e_shnum = unpack_from("<H", lib, 0x3C if self.is64bit else 0x30)[0]
+            e_shstrndx = unpack_from("<H", lib, 0x3E if self.is64bit else 0x32)[0]
             sh_table_size = e_shnum * e_shentsize
             elf.seek(e_shoff)
             self.sh_table = elf.read(sh_table_size)
-            section_size = 0x40 if self.Is64Bit else 0x28
+            section_size = 0x40 if self.is64bit else 0x28
             section_headers = [self.sh_table[i * section_size: (i + 1) * section_size] for i in range(e_shnum)]
             shstrtab_header = section_headers[e_shstrndx]
             shstrtab_offset = (
                 unpack_from("<Q", shstrtab_header, 0x18)[0]
-                if self.Is64Bit
+                if self.is64bit
                 else unpack_from("<I", shstrtab_header, 0x10)[0]
             )
             shstrtab_size = (
                 unpack_from("<Q", shstrtab_header, 0x20)[0]
-                if self.Is64Bit
+                if self.is64bit
                 else unpack_from("<I", shstrtab_header, 0x14)[0]
             )
             shstrtab = lib[shstrtab_offset: shstrtab_offset + shstrtab_size]
@@ -138,10 +140,10 @@ class Reader:
                     break
             shblob_header = section_headers[self.shblob_index]
             self.blob_offset = (
-                unpack_from("<Q", shblob_header, 0x18)[0] if self.Is64Bit else unpack_from("<I", shblob_header, 0x10)[0]
+                unpack_from("<Q", shblob_header, 0x18)[0] if self.is64bit else unpack_from("<I", shblob_header, 0x10)[0]
             )
             self.blob_size = (
-                unpack_from("<Q", shblob_header, 0x20)[0] if self.Is64Bit else unpack_from("<I", shblob_header, 0x14)[0]
+                unpack_from("<Q", shblob_header, 0x20)[0] if self.is64bit else unpack_from("<I", shblob_header, 0x14)[0]
             )
             self.lib = lib[:self.blob_offset]
             self.pre_sh_table = lib[self.blob_offset + self.blob_size: e_shoff]
@@ -152,20 +154,20 @@ class Reader:
         magic, version, entry_count, index_entry_count, index_size = unpack("<5I", self.store.read(20))
         header = Header(magic, version, entry_count, index_entry_count, index_size)
 
-        self.Header = header
+        self.header = header
         assembly_count = header.entry_count
-        IndexEntryCount = header.index_entry_count
+        index_entry_count = header.index_entry_count
 
         index = []
-        for _ in range(IndexEntryCount):
-            if self.Is64Bit:
+        for _ in range(index_entry_count):
+            if self.is64bit:
                 name_hash, descriptor_index = unpack("<QI", self.store.read(12))
             else:
                 name_hash, descriptor_index = unpack("<II", self.store.read(8))
             index.append(IndexEntry(name_hash, descriptor_index))
 
         descriptors = []
-        for i in range(assembly_count):
+        for _ in range(assembly_count):
             (
                 mapping_index,
                 data_offset,
@@ -187,28 +189,27 @@ class Reader:
             descriptors.append(desc)
 
         names = []
-        for i in range(assembly_count):
+        for _ in range(assembly_count):
             name_length = unpack("<I", self.store.read(4))[0]
             name_bytes = self.store.read(name_length).decode()
             names.append(name_bytes)
 
-        tempItems = {}
+        temp_items = {}
         for ie in index:
-            if ie.descriptor_index not in tempItems:
-                tempItems[ie.descriptor_index] = TemporaryItem(
+            if ie.descriptor_index not in temp_items:
+                temp_items[ie.descriptor_index] = TemporaryItem(
                     names[ie.descriptor_index], descriptors[ie.descriptor_index]
                 )
-            tempItems[ie.descriptor_index].IndexEntries.append(ie)
+            temp_items[ie.descriptor_index].index_entries.append(ie)
 
-        assert len(tempItems) == len(descriptors)
+        assert len(temp_items) == len(descriptors)
 
-        storeItems = []
-        TargetArch = 8 if self.Is64Bit else 4
-        for kvp in tempItems:
-            ti = tempItems[kvp]
-            item = StoreItemV2(TargetArch, ti.Name, self.Is64Bit, ti.IndexEntries, ti.Descriptor)
-            storeItems.append(item)
-        self.Assemblies = storeItems
+        store_items = []
+        target_arch = 8 if self.is64bit else 4
+        for ti in temp_items.values():
+            item = StoreItemV2(target_arch, ti.name, self.is64bit, ti.index_entries, ti.descriptor)
+            store_items.append(item)
+        self.assemblies = store_items
 
     def write_assemblies(self):
         def write(name, dat, comp=False):
@@ -221,20 +222,20 @@ class Reader:
         if not path.isdir(self.assemblies_folder):
             mkdir(self.assemblies_folder)
 
-        for assembly in self.Assemblies:
-            self.store.seek(assembly.DataOffset)
-            data = self.store.read(assembly.DataSize)
+        for assembly in self.assemblies:
+            self.store.seek(assembly.data_offset)
+            data = self.store.read(assembly.data_size)
             compressed = data[:4] == b"XALZ"
-            assembly.IsCompressed = compressed
-            write(assembly.Name, data, compressed)
-            if assembly.DebugSize:
-                self.store.seek(assembly.DebugOffset)
-                debug_data = self.store.read(assembly.DebugSize)
-                write(path.splitext(assembly.Name)[0] + ".pdb", debug_data)
-            if assembly.ConfigSize:
-                self.store.seek(assembly.ConfigOffset)
-                config_data = self.store.read(assembly.ConfigSize)
-                write(path.splitext(assembly.Name)[0] + ".config", config_data)
+            assembly.is_compressed = compressed
+            write(assembly.name, data, compressed)
+            if assembly.debug_size:
+                self.store.seek(assembly.debug_offset)
+                debug_data = self.store.read(assembly.debug_size)
+                write(path.splitext(assembly.name)[0] + ".pdb", debug_data)
+            if assembly.config_size:
+                self.store.seek(assembly.config_offset)
+                config_data = self.store.read(assembly.config_size)
+                write(path.splitext(assembly.name)[0] + ".config", config_data)
 
     def write_data(self):
         elf = {
@@ -243,9 +244,9 @@ class Reader:
             "sh_table": self.sh_table,
             "shblob_index": self.shblob_index,
             "libassemblies": self.libassemblies,
-            "is64bit": self.Is64Bit,
+            "is64bit": self.is64bit,
         }
-        data = {"elf": elf, "header": self.Header, "assemblies": self.Assemblies}
+        data = {"elf": elf, "header": self.header, "assemblies": self.assemblies}
         with open(path.join(self.assemblies_folder, "libassemblies.data"), "wb") as f:
             dump(data, f)
 
@@ -258,8 +259,9 @@ class Writer:
         data = self.get_data()
         self.header = data["header"]
         self.elf = data["elf"]
-        self.Is64Bit = self.elf["is64bit"]
-        self.assemblies = sorted(data["assemblies"], key=lambda assembly: assembly.MappingIndex)
+        self.is64bit = self.elf["is64bit"]
+        self.assemblies = sorted(data["assemblies"], key=lambda assembly: assembly.mapping_index)
+        self.assembly_data = {}
 
     def walk(self):
         self.prepare_blob()
@@ -275,33 +277,29 @@ class Writer:
         exit("Error: « assemblies » folder not found.")
 
     def prepare_blob(self):
-        offset = self.assemblies[0].DataOffset
+        offset = self.assemblies[0].data_offset
         for assembly in self.assemblies:
-            with open(path.join(self.assemblies_folder, assembly.Name), "rb") as f:
-                if assembly.IsCompressed:
+            with open(path.join(self.assemblies_folder, assembly.name), "rb") as f:
+                if assembly.is_compressed:
                     data = (
                         b"XALZ"
-                        + pack("<I", assembly.MappingIndex)
+                        + pack("<I", assembly.mapping_index)
                         + lz4.block.compress(f.read(), compression=12, mode="high_compression")
                     )
                 else:
                     data = f.read()
                 data_size = len(data)
-
-                diff_size = data_size - assembly.DataSize
+                diff_size = data_size - assembly.data_size
                 if diff_size:
-                    print("Modified:", assembly.MappingIndex, assembly.Name, diff_size)
-
-                with open(path.join(self.assemblies_folder, assembly.Name + ".blob"), "wb") as g:
-                    g.write(data)
-
-                assembly.DataSize = data_size
-                assembly.DataOffset = offset
-                if assembly.DebugOffset:
-                    assembly.DebugOffset = offset + data_size
-                if assembly.ConfigOffset:
-                    assembly.ConfigOffset = offset + data_size + assembly.DebugSize
-                offset += data_size + assembly.DebugSize + assembly.ConfigSize
+                    print("Modified:", assembly.mapping_index, assembly.name, diff_size)
+                self.assembly_data[assembly] = BytesIO(data)
+                assembly.data_size = data_size
+                assembly.data_offset = offset
+                if assembly.debug_offset:
+                    assembly.debug_offset = offset + data_size
+                if assembly.config_offset:
+                    assembly.config_offset = offset + data_size + assembly.debug_size
+                offset += data_size + assembly.debug_size + assembly.config_size
 
     def write_blob(self):
         with open(self.blob_bin, "wb") as f:
@@ -317,47 +315,45 @@ class Writer:
                 )
             )
 
-            indexEntries = []
+            index_entries = []
             for assembly in self.assemblies:
-                indexEntries.append((assembly.Hashes[0], assembly.MappingIndex))
-                indexEntries.append((assembly.Hashes[1], assembly.MappingIndex))
-            indexEntries = sorted(indexEntries, key=lambda index_entry: index_entry[0])
-            for ie in indexEntries:
-                f.write(pack("<QI" if self.Is64Bit else "<II", ie[0], ie[1]))
+                index_entries.append((assembly.hashes[0], assembly.mapping_index))
+                index_entries.append((assembly.hashes[1], assembly.mapping_index))
+            index_entries = sorted(index_entries, key=lambda index_entry: index_entry[0])
+            for ie in index_entries:
+                f.write(pack("<QI" if self.is64bit else "<II", ie[0], ie[1]))
 
             for assembly in self.assemblies:
                 f.write(
                     pack(
                         "<7I",
-                        assembly.MappingIndex,
-                        assembly.DataOffset,
-                        assembly.DataSize,
-                        assembly.DebugOffset,
-                        assembly.DebugSize,
-                        assembly.ConfigOffset,
-                        assembly.ConfigSize,
+                        assembly.mapping_index,
+                        assembly.data_offset,
+                        assembly.data_size,
+                        assembly.debug_offset,
+                        assembly.debug_size,
+                        assembly.config_offset,
+                        assembly.config_size,
                     )
                 )
 
             for assembly in self.assemblies:
-                name = assembly.Name.encode()
-                name_length = len(assembly.Name)
+                name = assembly.name.encode()
+                name_length = len(assembly.name)
                 f.write(pack("<I", name_length))
                 f.write(name)
 
             for assembly in self.assemblies:
-                assembly_path = path.join(self.assemblies_folder, assembly.Name + ".blob")
-                with open(assembly_path, "rb") as g:
-                    f.write(g.read())
-                if assembly.DebugSize:
-                    debug_file = path.join(self.assemblies_folder, path.splitext(assembly.Name)[0] + ".pdb")
+                data = self.assembly_data[assembly].getvalue()
+                f.write(data)
+                if assembly.debug_size:
+                    debug_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".pdb")
                     with open(debug_file, "rb") as g:
                         f.write(g.read())
-                if assembly.ConfigSize:
-                    config_file = path.join(self.assemblies_folder, path.splitext(assembly.Name)[0] + ".config")
+                if assembly.config_size:
+                    config_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".config")
                     with open(config_file, "rb") as g:
                         f.write(g.read())
-                remove(path.join(self.assemblies_folder, assembly.Name + ".blob"))
 
     def write_libassemblies(self):
         libassemblies = self.elf["libassemblies"]
@@ -368,11 +364,12 @@ class Writer:
         with open(self.blob_bin, "rb") as f:
             blob = f.read()
 
-        e_shoff_offset = 0x28 if self.Is64Bit else 0x20
-        blob_size_offset = (0x20 if self.Is64Bit else 0x14) * (2 * self.elf["shblob_index"] + 1)
-        pack_into("<Q" if self.Is64Bit else "<I", sh_table, blob_size_offset, len(blob))
+        blob_size_offset = (0x20 if self.is64bit else 0x14) * (2 * self.elf["shblob_index"] + 1)
+        pack_into("<Q" if self.is64bit else "<I", sh_table, blob_size_offset, len(blob))
+
+        e_shoff_offset = 0x28 if self.is64bit else 0x20
         new_e_shoff = len(lib) + len(blob) + len(pre_sh_table)
-        pack_into("<Q" if self.Is64Bit else "<I", lib, e_shoff_offset, new_e_shoff)
+        pack_into("<Q" if self.is64bit else "<I", lib, e_shoff_offset, new_e_shoff)
 
         output = libassemblies + ".tmp"
         with open(output, "wb") as f:
