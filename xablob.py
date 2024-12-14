@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-xablob
+XaBlob
 by Kirlif'
 December 2024
 """
@@ -87,7 +87,6 @@ class Reader:
         self.blob_offset = None
         self.blob_size = None
         self.lib = None
-        self.pre_sh_table = None
         self.sh_table = None
         self.is64bit = None
         self.assemblies = None
@@ -146,7 +145,6 @@ class Reader:
                 unpack_from("<Q", shblob_header, 0x20)[0] if self.is64bit else unpack_from("<I", shblob_header, 0x14)[0]
             )
             self.lib = lib[:self.blob_offset]
-            self.pre_sh_table = lib[self.blob_offset + self.blob_size: e_shoff]
             elf.seek(self.blob_offset)
             self.store = BytesIO(elf.read(self.blob_size))
 
@@ -240,7 +238,6 @@ class Reader:
     def write_data(self):
         elf = {
             "lib": self.lib,
-            "pre_sh_table": self.pre_sh_table,
             "sh_table": self.sh_table,
             "shblob_index": self.shblob_index,
             "libassemblies": self.libassemblies,
@@ -358,7 +355,6 @@ class Writer:
     def write_libassemblies(self):
         libassemblies = self.elf["libassemblies"]
         lib = bytearray(self.elf["lib"])
-        pre_sh_table = self.elf["pre_sh_table"]
         sh_table = bytearray(self.elf["sh_table"])
 
         with open(self.blob_bin, "rb") as f:
@@ -368,12 +364,12 @@ class Writer:
         pack_into("<Q" if self.is64bit else "<I", sh_table, blob_size_offset, len(blob))
 
         e_shoff_offset = 0x28 if self.is64bit else 0x20
-        new_e_shoff = len(lib) + len(blob) + len(pre_sh_table)
+        new_e_shoff = len(lib) + len(blob)
         pack_into("<Q" if self.is64bit else "<I", lib, e_shoff_offset, new_e_shoff)
 
         output = libassemblies + ".tmp"
         with open(output, "wb") as f:
-            f.write(lib + blob + pre_sh_table + sh_table)
+            f.write(lib + blob + sh_table)
         rename(libassemblies, libassemblies + ".ori")
         rename(output, libassemblies)
 
