@@ -141,6 +141,7 @@ class Reader:
             self.blob_offset = (
                 unpack_from("<Q", shblob_header, 0x18)[0] if self.is64bit else unpack_from("<I", shblob_header, 0x10)[0]
             )
+            assert self.blob_offset % 0x4000 == 0
             self.blob_size = (
                 unpack_from("<Q", shblob_header, 0x20)[0] if self.is64bit else unpack_from("<I", shblob_header, 0x14)[0]
             )
@@ -252,7 +253,7 @@ class Writer:
     def __init__(self, working_dir):
         self.working_dir = working_dir
         self.assemblies_folder = path.join(working_dir, "assemblies")
-        self.blob_bin = path.join(self.assemblies_folder, "blob.bin")
+        self.blob_bin = BytesIO()
         data = self.get_data()
         self.header = data["header"]
         self.elf = data["elf"]
@@ -299,66 +300,63 @@ class Writer:
                 offset += data_size + assembly.debug_size + assembly.config_size
 
     def write_blob(self):
-        with open(self.blob_bin, "wb") as f:
+        self.blob_bin.write(
+            pack(
+                "<5I",
+                self.header.magic,
+                self.header.version,
+                self.header.entry_count,
+                self.header.index_entry_count,
+                self.header.index_size,
+            )
+        )
 
-            f.write(
+        index_entries = []
+        for assembly in self.assemblies:
+            index_entries.append((assembly.hashes[0], assembly.mapping_index))
+            index_entries.append((assembly.hashes[1], assembly.mapping_index))
+        index_entries = sorted(index_entries, key=lambda index_entry: index_entry[0])
+        for ie in index_entries:
+            self.blob_bin.write(pack("<QI" if self.is64bit else "<II", ie[0], ie[1]))
+
+        for assembly in self.assemblies:
+            self.blob_bin.write(
                 pack(
-                    "<5I",
-                    self.header.magic,
-                    self.header.version,
-                    self.header.entry_count,
-                    self.header.index_entry_count,
-                    self.header.index_size,
+                    "<7I",
+                    assembly.mapping_index,
+                    assembly.data_offset,
+                    assembly.data_size,
+                    assembly.debug_offset,
+                    assembly.debug_size,
+                    assembly.config_offset,
+                    assembly.config_size,
                 )
             )
 
-            index_entries = []
-            for assembly in self.assemblies:
-                index_entries.append((assembly.hashes[0], assembly.mapping_index))
-                index_entries.append((assembly.hashes[1], assembly.mapping_index))
-            index_entries = sorted(index_entries, key=lambda index_entry: index_entry[0])
-            for ie in index_entries:
-                f.write(pack("<QI" if self.is64bit else "<II", ie[0], ie[1]))
+        for assembly in self.assemblies:
+            name = assembly.name.encode()
+            name_length = len(assembly.name)
+            self.blob_bin.write(pack("<I", name_length))
+            self.blob_bin.write(name)
 
-            for assembly in self.assemblies:
-                f.write(
-                    pack(
-                        "<7I",
-                        assembly.mapping_index,
-                        assembly.data_offset,
-                        assembly.data_size,
-                        assembly.debug_offset,
-                        assembly.debug_size,
-                        assembly.config_offset,
-                        assembly.config_size,
-                    )
-                )
-
-            for assembly in self.assemblies:
-                name = assembly.name.encode()
-                name_length = len(assembly.name)
-                f.write(pack("<I", name_length))
-                f.write(name)
-
-            for assembly in self.assemblies:
-                data = self.assembly_data[assembly].getvalue()
-                f.write(data)
-                if assembly.debug_size:
-                    debug_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".pdb")
-                    with open(debug_file, "rb") as g:
-                        f.write(g.read())
-                if assembly.config_size:
-                    config_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".config")
-                    with open(config_file, "rb") as g:
-                        f.write(g.read())
+        for assembly in self.assemblies:
+            data = self.assembly_data[assembly].getvalue()
+            self.blob_bin.write(data)
+            if assembly.debug_size:
+                debug_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".pdb")
+                with open(debug_file, "rb") as g:
+                    self.blob_bin.write(g.read())
+            if assembly.config_size:
+                config_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".config")
+                with open(config_file, "rb") as g:
+                    self.blob_bin.write(g.read())
 
     def write_libassemblies(self):
         libassemblies = self.elf["libassemblies"]
         lib = bytearray(self.elf["lib"])
         sh_table = bytearray(self.elf["sh_table"])
 
-        with open(self.blob_bin, "rb") as f:
-            blob = f.read()
+        blob = self.blob_bin.getvalue()
 
         blob_size_offset = (0x20 if self.is64bit else 0x14) * (2 * self.elf["shblob_index"] + 1)
         pack_into("<Q" if self.is64bit else "<I", sh_table, blob_size_offset, len(blob))
