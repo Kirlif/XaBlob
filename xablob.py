@@ -347,7 +347,7 @@ class Writer:
                 with open(debug_file, "rb") as g:
                     self.blob_bin.write(g.read())
             if assembly.config_size:
-                config_file = path.join(self.assemblies_folder, path.splitext(assembly.name)[0] + ".config")
+                config_file = path.join(self.assemblies_folder, assembly.name + ".config")
                 with open(config_file, "rb") as g:
                     self.blob_bin.write(g.read())
 
