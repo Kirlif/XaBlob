@@ -5,6 +5,9 @@
   </p>
 </div>
 
+### Support
+Xamarin assembly store format version 2 and version 3
+
 ### Requierements
 1. Python3
 2. lz4 python package.
