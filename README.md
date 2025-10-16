@@ -13,14 +13,17 @@
    ```
 
 ### Usage
-python3 xablob.py [-h] [-u LIB_PATH | -p [LIB_DIR] | -c [LIB_DIR]]
+python3 xablob.py [-h] [-l LIB_PATH | -u LIB_PATH | -p [LIB_DIR] | -c [LIB_DIR]]
 
 
 #### options<br>
+<strong>-l</strong>:
+show assembly store content<br>
+requiered argument: path to the elf
+
 <strong>-u</strong>:
 unpack dlls in « assemblies » folder next to the elf<br>
 requiered argument: path to the elf
-
 
 <strong>-p:</strong>
 package dlls<br>
