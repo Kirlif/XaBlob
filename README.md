@@ -25,6 +25,7 @@ pip install --user https://github.com/Kirlif/XaBlob/releases/download/1.1/xablob
    ```
 
 ### Usage
+#### from CLI<br>
 xablob [-h] [-v] [-l LIB_PATH | -u LIB_PATH | -p [LIB_DIR] | -c [LIB_DIR]]
 
 
@@ -47,12 +48,12 @@ remove « assemblies » folder<br>
 optional argument: path to the parent directory of the elf<br>
 current directory by default
 
-#### as python package<br>
-~$ import xablob<br>
-~$ xablob.list(libapp.so)<br>
-~$ xablob.unpack(libapp.so)<br>
-~$ xablob.pack(working_dir)<br>
-~$ xablob.clean(woking_dir)<br>
+#### from Python<br>
+\>\>\> import xablob<br>
+\>\>\> xablob.list(LIB_PATH)<br>
+\>\>\> xablob.unpack(LIB_PATH)<br>
+\>\>\> xablob.pack(LIB_DIR)<br>
+\>\>\> xablob.clean(LIB_DIR)<br>
 
 ### ToDo
 - regular assemblies and satellite assemblies
