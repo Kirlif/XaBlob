@@ -14,9 +14,18 @@ Xamarin assembly store format version 2 and version 3
    ```bash
    pip3 install -U --user 'lz4'
    ```
+### Installation
+Download the wheel here: https://github.com/Kirlif/XaBlob/releases/latest
+   ```bash
+pip install --user xablob-1.1-py3-none-any.whl
+   ```
+or direcly
+   ```bash
+pip install --user https://github.com/Kirlif/XaBlob/releases/download/1.1/xablob-1.1-py3-none-any.whl
+   ```
 
 ### Usage
-python3 xablob.py [-h] [-l LIB_PATH | -u LIB_PATH | -p [LIB_DIR] | -c [LIB_DIR]]
+xablob [-h] [-v] [-l LIB_PATH | -u LIB_PATH | -p [LIB_DIR] | -c [LIB_DIR]]
 
 
 #### options<br>
@@ -38,6 +47,12 @@ remove « assemblies » folder<br>
 optional argument: path to the parent directory of the elf<br>
 current directory by default
 
+#### as python package<br>
+~$ import xablob<br>
+~$ xablob.list(libapp.so)<br>
+~$ xablob.unpack(libapp.so)<br>
+~$ xablob.pack(working_dir)<br>
+~$ xablob.clean(woking_dir)<br>
 
 ### ToDo
 - regular assemblies and satellite assemblies
