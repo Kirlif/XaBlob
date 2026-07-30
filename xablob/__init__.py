@@ -39,13 +39,13 @@ def unpack(libass):
 def file_path(string):
     if path.isfile(string):
         return string
-    raise ()
-
+    raise argparse.ArgumentTypeError(f"file not found: {string}")
+    
 
 def dir_path(string):
     if path.isdir(string):
         return string
-    raise ()
+    raise argparse.ArgumentTypeError(f"directory not found: {string}")
 
 
 def main():
