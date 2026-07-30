@@ -6,6 +6,16 @@ from struct import pack, pack_into
 from sys import exit
 
 
+# Minimal valid .NET/Mono XML configuration.
+# The Mono runtime parses assembly config as XML on startup; an empty or
+# malformed file causes a fatal TypeLoadException / parser crash.
+_MINIMAL_CONFIG_STUB = (
+    b'<?xml version="1.0" encoding="utf-8"?>\n'
+    b'<configuration>\n'
+    b'</configuration>\n'
+)
+
+
 class Writer:
     def __init__(self, working_dir):
         self.working_dir = working_dir
@@ -21,6 +31,7 @@ class Writer:
             data["assemblies"], key=lambda assembly: assembly.mapping_index
         )
         self.assembly_data = {}
+        self.config_data = {}
 
     def walk(self):
         self.prepare_blob()
@@ -33,7 +44,7 @@ class Writer:
         if path.isfile(data_path):
             with open(data_path, "rb") as f:
                 return load(f)
-        exit("Error: « assemblies » folder not found.")
+        exit("Error: \u00ab assemblies \u00bb folder not found.")
 
     def prepare_blob(self):
         offset = self.assemblies[0].data_offset
@@ -41,7 +52,7 @@ class Writer:
         rti = "RTId" if self.assemblies[0].index_rt_desc_array else ""
         print(
             "{:{ml}}{:<6}{:<8}{:<{ms}}{}".format(
-                "Name", "MId", rti, "Size", "Δ", ml=self.ml, ms=self.ms
+                "Name", "MId", rti, "Size", "\u0394", ml=self.ml, ms=self.ms
             )
         )
         for assembly in self.assemblies:
@@ -57,39 +68,78 @@ class Writer:
                         )
                     else:
                         data = f.read()
-                    data_size = len(data)
-                    diff_size = data_size - assembly.data_size
-                    self.assembly_data[assembly] = BytesIO(data)
-                    assembly.data_size = data_size
-                    assembly.data_offset = offset
-                    if assembly.debug_offset:
-                        assembly.debug_offset = offset + data_size
-                    if assembly.config_offset:
-                        assembly.config_offset = (
-                            offset + data_size + assembly.debug_size
-                        )
-                    offset += data_size + assembly.debug_size + assembly.config_size
-                    print(
-                        "{:{ml}}{:<6}{:<8}{:<{ms}}{}".format(
-                            assembly.name,
-                            assembly.mapping_index,
-                            (
-                                str(
-                                    int.from_bytes(
-                                        assembly.index_rt_desc_array, "little"
-                                    )
+                data_size = len(data)
+                diff_size = data_size - assembly.data_size
+                self.assembly_data[assembly] = BytesIO(data)
+                assembly.data_size = data_size
+                assembly.data_offset = offset
+                if assembly.debug_offset:
+                    assembly.debug_offset = offset + data_size
+
+                # Resolve config data BEFORE offset arithmetic so that
+                # assembly.config_size reflects the actual payload length.
+                if assembly.config_offset:
+                    cfg = self._read_config(assembly)
+                    self.config_data[assembly] = cfg
+                    assembly.config_size = len(cfg)
+                    assembly.config_offset = offset + data_size + assembly.debug_size
+                else:
+                    self.config_data[assembly] = b""
+
+                offset += data_size + assembly.debug_size + assembly.config_size
+                print(
+                    "{:{ml}}{:<6}{:<8}{:<{ms}}{}".format(
+                        assembly.name,
+                        assembly.mapping_index,
+                        (
+                            str(
+                                int.from_bytes(
+                                    assembly.index_rt_desc_array, "little"
                                 )
-                                if rti
-                                else ""
-                            ),
-                            assembly.data_size,
-                            diff_size,
-                            ml=self.ml,
-                            ms=self.ms,
-                        )
+                            )
+                            if rti
+                            else ""
+                        ),
+                        assembly.data_size,
+                        diff_size,
+                        ml=self.ml,
+                        ms=self.ms,
                     )
+                )
             else:
                 print("Ignored:", f" {assembly.mapping_index:<3}", assembly.name)
+
+    def _read_config(self, assembly):
+        """Read config data for an assembly, with fallback logic.
+
+        Tries multiple filename conventions in order:
+          1. <BaseName>.config      (e.g. ExercisesBase.Droid.config)
+          2. <FullName>.config      (e.g. ExercisesBase.Droid.dll.config)
+
+        If no valid (non-empty) config file is found on disk, returns a
+        minimal well-formed XML configuration stub so the Mono/Xamarin
+        runtime does not crash with a parse/EOF exception on startup.
+        """
+        base_name = path.splitext(assembly.name)[0]
+        candidates = [
+            path.join(self.assemblies_folder, base_name + ".config"),
+            path.join(self.assemblies_folder, assembly.name + ".config"),
+        ]
+        for config_file in candidates:
+            if path.isfile(config_file):
+                with open(config_file, "rb") as g:
+                    data = g.read()
+                if len(data) > 0:
+                    return data
+                # File exists but is empty (e.g. from `touch`) — fall through
+                break
+
+        # No valid config file found; emit a minimal XML stub.
+        print(
+            f'  Warning: no valid config for "{assembly.name}", '
+            f"using minimal XML stub ({len(_MINIMAL_CONFIG_STUB)} bytes)"
+        )
+        return _MINIMAL_CONFIG_STUB
 
     def write_blob(self):
         self.new_blob_bin.write(
@@ -153,12 +203,7 @@ class Writer:
                     with open(debug_file, "rb") as g:
                         self.new_blob_bin.write(g.read())
                 if assembly.config_size:
-                    config_file = path.join(
-                        self.assemblies_folder,
-                        path.splitext(assembly.name)[0] + ".config",
-                    )
-                    with open(config_file, "rb") as g:
-                        self.new_blob_bin.write(g.read())
+                    self.new_blob_bin.write(self.config_data[assembly])
 
     def write_libassemblies(self):
         print(" Writing libassemblies")
