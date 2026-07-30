@@ -233,7 +233,8 @@ class Reader:
                 if assembly.config_size:
                     self.store.seek(assembly.config_offset)
                     config_data = self.store.read(assembly.config_size)
-                    write(assembly.name + ".config", config_data)
+                    # FIX: strip .dll extension, consistent with .pdb naming above
+                    write(path.splitext(assembly.name)[0] + ".config", config_data)
         self.print_assemblies()
 
     def write_data(self):
