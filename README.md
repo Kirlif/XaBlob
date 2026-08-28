@@ -17,11 +17,11 @@ Xamarin assembly store format version 2 and version 3
 ### Installation
 Download the wheel here: https://github.com/Kirlif/XaBlob/releases/latest
    ```bash
-pip install --user xablob-1.1-py3-none-any.whl
+pip install --user xablob-1.2-py3-none-any.whl
    ```
 or direcly
    ```bash
-pip install --user https://github.com/Kirlif/XaBlob/releases/download/1.1/xablob-1.1-py3-none-any.whl
+pip install --user https://github.com/Kirlif/XaBlob/releases/download/1.2/xablob-1.2-py3-none-any.whl
    ```
 
 ### Usage
