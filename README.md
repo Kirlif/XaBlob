@@ -54,8 +54,3 @@ current directory by default
 \>\>\> xablob.unpack(LIB_PATH)<br>
 \>\>\> xablob.pack(LIB_DIR)<br>
 \>\>\> xablob.clean(LIB_DIR)<br>
-
-### ToDo
-- regular assemblies and satellite assemblies
-
-- runtime config blob?

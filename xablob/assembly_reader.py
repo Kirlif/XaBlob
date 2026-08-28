@@ -1,3 +1,18 @@
+# Copyright 2026 github.com/Kirlif
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from lz4.block import compress, decompress
 from io import BytesIO
 from os import mkdir, path
@@ -152,7 +167,7 @@ class Reader:
         names = []
         for _ in range(assembly_count):
             name_length = unpack("<I", self.store.read(4))[0]
-            name_bytes = self.store.read(name_length).decode()
+            name_bytes = self.store.read(name_length).decode("utf-8")
             names.append(name_bytes)
 
         temp_items = {}
@@ -233,7 +248,6 @@ class Reader:
                 if assembly.config_size:
                     self.store.seek(assembly.config_offset)
                     config_data = self.store.read(assembly.config_size)
-                    # FIX: strip .dll extension, consistent with .pdb naming above
                     write(path.splitext(assembly.name)[0] + ".config", config_data)
         self.print_assemblies()
 
