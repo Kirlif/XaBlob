@@ -1,19 +1,24 @@
+# Copyright 2026 github.com/Kirlif
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from lz4.block import compress
 from io import BytesIO
 from os import path, rename
 from pickle import load
 from struct import pack, pack_into
 from sys import exit
-
-
-# Minimal valid .NET/Mono XML configuration.
-# The Mono runtime parses assembly config as XML on startup; an empty or
-# malformed file causes a fatal TypeLoadException / parser crash.
-_MINIMAL_CONFIG_STUB = (
-    b'<?xml version="1.0" encoding="utf-8"?>\n'
-    b'<configuration>\n'
-    b'</configuration>\n'
-)
 
 
 class Writer:
@@ -31,6 +36,7 @@ class Writer:
             data["assemblies"], key=lambda assembly: assembly.mapping_index
         )
         self.assembly_data = {}
+        self.debug_data = {}
         self.config_data = {}
 
     def walk(self):
@@ -70,76 +76,47 @@ class Writer:
                         data = f.read()
                 data_size = len(data)
                 diff_size = data_size - assembly.data_size
-                self.assembly_data[assembly] = BytesIO(data)
+                self.assembly_data[assembly] = data
                 assembly.data_size = data_size
                 assembly.data_offset = offset
                 if assembly.debug_offset:
+                    debug_file = path.join(
+                        self.assemblies_folder,
+                        path.splitext(assembly.name)[0] + ".pdb",
+                    )
+                    with open(debug_file, "rb") as g:
+                        self.debug_data[assembly] = g.read()
+                    assembly.debug_size = len(self.debug_data[assembly])
                     assembly.debug_offset = offset + data_size
-
-                # Resolve config data BEFORE offset arithmetic so that
-                # assembly.config_size reflects the actual payload length.
                 if assembly.config_offset:
-                    cfg = self._read_config(assembly)
-                    self.config_data[assembly] = cfg
-                    assembly.config_size = len(cfg)
+                    config_file = path.join(
+                        self.assemblies_folder,
+                        path.splitext(assembly.name)[0] + ".config",
+                    )
+                    with open(config_file, "rb") as g:
+                        self.config_data[assembly] = g.read()
+                    assembly.config_size = len(self.config_data[assembly])
                     assembly.config_offset = offset + data_size + assembly.debug_size
-                else:
-                    self.config_data[assembly] = b""
-
-                offset += data_size + assembly.debug_size + assembly.config_size
+                offset += (
+                    assembly.data_size + assembly.debug_size + assembly.config_size
+                )
                 print(
                     "{:{ml}}{:<6}{:<8}{:<{ms}}{}".format(
                         assembly.name,
                         assembly.mapping_index,
                         (
-                            str(
-                                int.from_bytes(
-                                    assembly.index_rt_desc_array, "little"
-                                )
-                            )
+                            str(int.from_bytes(assembly.index_rt_desc_array, "little"))
                             if rti
                             else ""
                         ),
                         assembly.data_size,
-                        diff_size,
+                        str(diff_size) if diff_size <= 0 else f"+{diff_size}",
                         ml=self.ml,
                         ms=self.ms,
                     )
                 )
             else:
                 print("Ignored:", f" {assembly.mapping_index:<3}", assembly.name)
-
-    def _read_config(self, assembly):
-        """Read config data for an assembly, with fallback logic.
-
-        Tries multiple filename conventions in order:
-          1. <BaseName>.config      (e.g. ExercisesBase.Droid.config)
-          2. <FullName>.config      (e.g. ExercisesBase.Droid.dll.config)
-
-        If no valid (non-empty) config file is found on disk, returns a
-        minimal well-formed XML configuration stub so the Mono/Xamarin
-        runtime does not crash with a parse/EOF exception on startup.
-        """
-        base_name = path.splitext(assembly.name)[0]
-        candidates = [
-            path.join(self.assemblies_folder, base_name + ".config"),
-            path.join(self.assemblies_folder, assembly.name + ".config"),
-        ]
-        for config_file in candidates:
-            if path.isfile(config_file):
-                with open(config_file, "rb") as g:
-                    data = g.read()
-                if len(data) > 0:
-                    return data
-                # File exists but is empty (e.g. from `touch`) — fall through
-                break
-
-        # No valid config file found; emit a minimal XML stub.
-        print(
-            f'  Warning: no valid config for "{assembly.name}", '
-            f"using minimal XML stub ({len(_MINIMAL_CONFIG_STUB)} bytes)"
-        )
-        return _MINIMAL_CONFIG_STUB
 
     def write_blob(self):
         self.new_blob_bin.write(
@@ -187,22 +164,17 @@ class Writer:
             )
 
         for assembly in self.assemblies:
-            name = assembly.name.encode()
+            name = assembly.name.encode("utf-8")
             name_length = len(assembly.name)
             self.new_blob_bin.write(pack("<I", name_length))
             self.new_blob_bin.write(name)
 
         for assembly in self.assemblies:
             if not assembly.ignore:
-                data = self.assembly_data[assembly].getvalue()
-                self.new_blob_bin.write(data)
-                if assembly.debug_size:
-                    debug_file = path.join(
-                        self.assemblies_folder, path.splitext(assembly.name)[0] + ".pdb"
-                    )
-                    with open(debug_file, "rb") as g:
-                        self.new_blob_bin.write(g.read())
-                if assembly.config_size:
+                self.new_blob_bin.write(self.assembly_data[assembly])
+                if assembly.debug_offset:
+                    self.new_blob_bin.write(self.debug_data[assembly])
+                if assembly.config_offset:
                     self.new_blob_bin.write(self.config_data[assembly])
 
     def write_libassemblies(self):
